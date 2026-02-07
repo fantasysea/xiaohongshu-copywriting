@@ -1,0 +1,44 @@
+{
+  "note": "实时API配置（可选，需用户自行申请API key）",
+  "enabled": false,
+  "apis": {
+    "weibo_hot": {
+      "name": "微博热搜",
+      "url": "https://api.weibo.com/2/trends.json",
+      "auth": "oauth2",
+      "enabled": false,
+      "api_key": "YOUR_API_KEY_HERE",
+      "api_secret": "YOUR_API_SECRET_HERE"
+    },
+    "zhihu_hot": {
+      "name": "知乎热榜",
+      "url": "https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total",
+      "auth": "none",
+      "enabled": false
+    },
+    "douyin_hot": {
+      "name": "抖音热榜",
+      "url": "https://open.douyin.com/platform/hot/list",
+      "auth": "api_key",
+      "enabled": false,
+      "api_key": "YOUR_API_KEY_HERE"
+    },
+    "news_api": {
+      "name": "新闻API",
+      "url": "https://newsapi.org/v2/top-headlines",
+      "auth": "api_key",
+      "enabled": false,
+      "api_key": "YOUR_API_KEY_HERE",
+      "country": "cn",
+      "category": "general"
+    },
+    "xiaohongshu_hot": {
+      "name": "小红书热搜",
+      "url": "https://www.xiaohongshu.com/api/sns/web/v1/search/trending",
+      "auth": "cookie",
+      "enabled": false,
+      "note": "需要登录后获取cookie"
+    }
+  },
+  "setup_guide": "使用说明：\n1. 如需实时热点，请申请对应API key\n2. 将api_key填入上方对应位置\n3. 将enabled设为true\n4. 重启skill生效\n\n推荐申请顺序：\n1. 知乎热榜（无需key，免费）\n2. NewsAPI（免费版足够使用）\n3. 微博API（需要申请开发者账号）"
+}

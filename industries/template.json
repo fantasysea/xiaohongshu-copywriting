@@ -1,0 +1,37 @@
+{
+  "id": "template",
+  "name": "行业名称",
+  "icon": "🎯",
+  "description": "行业描述",
+  "keywords": [
+    "关键词1",
+    "关键词2",
+    "关键词3"
+  ],
+  "emojis": [
+    "😀",
+    "🎯",
+    "✨"
+  ],
+  "hashtags": [
+    "#话题标签1",
+    "#话题标签2",
+    "#话题标签3"
+  ],
+  "formulas": [
+    "pain_solution",
+    "number_list",
+    "contrast"
+  ],
+  "writing_style": "写作风格描述",
+  "sample_topics": [
+    "示例选题1",
+    "示例选题2",
+    "示例选题3"
+  ],
+  "hot_topic_categories": [
+    "entertainment",
+    "social",
+    "shopping"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "template",
+  "name": "公式名称",
+  "icon": "📝",
+  "template": "{变量1}｜{变量2}！",
+  "description": "公式描述说明",
+  "examples": [
+    "示例标题1",
+    "示例标题2",
+    "示例标题3"
+  ],
+  "variables": [
+    "变量1",
+    "变量2"
+  ],
+  "suitable_industries": [
+    "beauty",
+    "fashion",
+    "food"
+  ],
+  "tips": "使用技巧和建议",
+  "score_weight": {
+    "click_rate": 0.3,
+    "curiosity": 0.3,
+    "emotion": 0.2,
+    "practicality": 0.2
+  }
+}

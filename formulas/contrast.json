@@ -1,0 +1,17 @@
+{
+  "id": "contrast",
+  "name": "对比冲突型",
+  "icon": "⚖️",
+  "template": "从{Before}到{After}｜{转折内容}",
+  "description": "通过前后对比制造冲突感，激发好奇心",
+  "examples": [
+    "从月薪3k到3w｜我的自媒体逆袭之路",
+    "从120斤到95斤｜我只做了这3件事",
+    "从租房到买房｜95后女孩的5年存钱计划",
+    "从社恐到销冠｜我的3个沟通心法",
+    "从烂脸到鸡蛋肌｜我的护肤逆袭日记"
+  ],
+  "variables": ["Before", "After", "转折内容"],
+  "suitable_industries": ["career", "fitness", "beauty", "lifestyle"],
+  "tips": "对比要强烈，转折要有戏剧性，数字要具体"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "hot_topic",
+  "name": "热点借势型",
+  "icon": "🔥",
+  "template": "跟着{热点IP}学{方向}｜{趋势}",
+  "description": "借势热点IP流量，关联自身内容",
+  "examples": [
+    "跟着《繁花》学穿搭｜90年代复古风回潮",
+    "《狂飙》大嫂同款｜方圆脸发型教程",
+    "跟着《长相思》学妆容｜古风美人妆",
+    "《芭比》电影同款｜粉色系穿搭指南",
+    "跟着明星学护肤｜XXX同款保养秘诀"
+  ],
+  "variables": ["热点IP", "方向", "趋势"],
+  "suitable_industries": ["fashion", "beauty", "lifestyle", "entertainment"],
+  "tips": "热点要时效性强，关联要自然，趋势要准确"
+}

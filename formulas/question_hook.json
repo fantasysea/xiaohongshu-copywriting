@@ -1,0 +1,17 @@
+{
+  "id": "question_hook",
+  "name": "悬念提问型",
+  "icon": "❓",
+  "template": "{疑问词}{人群}都在{秘密行为}？",
+  "description": "用疑问制造悬念，激发点击探索欲望",
+  "examples": [
+    "为什么有钱人都在偷偷用这个记账APP？",
+    "为什么明星素颜也能这么美？",
+    "为什么同事工资一样却过得比我好？",
+    "为什么闺蜜皮肤越来越好？",
+    "为什么学霸复习效率这么高？"
+  ],
+  "variables": ["疑问词", "人群", "秘密行为"],
+  "suitable_industries": ["beauty", "career", "education", "lifestyle"],
+  "tips": "疑问要引发好奇，秘密行为要有吸引力，点到为止"
+}

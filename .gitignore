@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local runtime data (generated)
+data/history.json
+data/user_prefs.json
+
+# Editors
+.vscode/
+.idea/

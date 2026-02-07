@@ -41,6 +41,191 @@ class CopywritingGenerator:
         self.config = self._load_config()
         self.industries = self._load_industries()
         self.formulas = self._load_formulas()
+        self.ai_options: Dict[str, Any] = {
+            "enabled": False,
+            "provider": "anthropic",
+            "model": None,
+            "max_tokens": 900,
+            "temperature": 0.6,
+            "timeout_s": 30,
+        }
+
+    def configure_ai(
+        self,
+        *,
+        enabled: bool,
+        provider: str = "anthropic",
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        timeout_s: Optional[int] = None,
+    ) -> None:
+        self.ai_options["enabled"] = bool(enabled)
+        if provider:
+            self.ai_options["provider"] = str(provider).strip().lower()
+        if model is not None:
+            self.ai_options["model"] = (str(model).strip() or None)
+        if max_tokens is not None:
+            self.ai_options["max_tokens"] = int(max_tokens)
+        if temperature is not None:
+            self.ai_options["temperature"] = float(temperature)
+        if timeout_s is not None:
+            self.ai_options["timeout_s"] = int(timeout_s)
+
+    def _ai_enabled(self) -> bool:
+        return bool((self.ai_options or {}).get("enabled"))
+
+    def _try_parse_ai_json(self, text: str) -> Optional[Dict[str, Any]]:
+        s = (text or "").strip()
+        if not s:
+            return None
+
+        if s.startswith("```"):
+            s = s.strip("`")
+            s = s.replace("json\n", "", 1).strip()
+
+        try:
+            v = json.loads(s)
+            return v if isinstance(v, dict) else None
+        except Exception:
+            pass
+
+        l = s.find("{")
+        r = s.rfind("}")
+        if l != -1 and r != -1 and r > l:
+            try:
+                v = json.loads(s[l : r + 1])
+                return v if isinstance(v, dict) else None
+            except Exception:
+                return None
+
+        return None
+
+    def _maybe_ai_enhance_copy(
+        self,
+        copy_data: Dict[str, Any],
+        *,
+        topic: str,
+        industry_id: str,
+        style_id: str,
+        hot: Optional[Dict[str, Any]] = None,
+        idea: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        if not self._ai_enabled():
+            return copy_data
+
+        try:
+            from llm.client import LLMError, default_model, enhance_copy, get_api_key
+        except Exception:
+            print("⚠️  AI增强不可用（缺少 llm 模块）", file=sys.stderr)
+            return copy_data
+
+        provider = str((self.ai_options or {}).get("provider") or "anthropic").strip().lower()
+        api_key = get_api_key(provider)
+        if not api_key:
+            env_name = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+            print(f"⚠️  未检测到 {env_name}，已跳过 AI 增强（仍使用离线模板）", file=sys.stderr)
+            return copy_data
+
+        model = str((self.ai_options or {}).get("model") or "").strip() or default_model(provider)
+        max_tokens = int((self.ai_options or {}).get("max_tokens") or 900)
+        temperature = float((self.ai_options or {}).get("temperature") or 0.6)
+        timeout_s = int((self.ai_options or {}).get("timeout_s") or 30)
+
+        industry = self.industries.get(industry_id, {}) or {}
+        style_label = self._style_label(style_id)
+        hot_line = ""
+        if hot and hot.get("suggested_angle"):
+            hot_line = str(hot.get("suggested_angle", "")).strip()
+
+        draft_title = str(copy_data.get("title", "")).strip()
+        draft_full = str(copy_data.get("full_content", "")).strip()
+        draft_tags = copy_data.get("hashtags", []) or []
+        draft_tags_str = " ".join([str(x).strip() for x in draft_tags if str(x).strip()])
+
+        idea_title = ""
+        idea_angle = ""
+        if isinstance(idea, dict):
+            idea_title = str(idea.get("title", "")).strip()
+            idea_angle = str(idea.get("angle", "")).strip()
+
+        prompt = (
+            "你是中文小红书（XHS）爆款文案编辑。\n"
+            "任务：在不改变主题与人设风格的前提下，提升点击/完读/收藏/转化。\n\n"
+            "【硬性要求】\n"
+            "- 只输出一个 JSON 对象（不要任何解释、不要 markdown）。\n"
+            "- JSON 键：title, full_content, hashtags。\n"
+            "- title：<=20字，避免空泛词与占位符。\n"
+            "- full_content：只写正文（不含标题行），结构为：开头1段 + 正文3-6段 + CTA1段 + 最后一行话题标签。\n"
+            "- emoji：适中，只放在段首；不要每句都加。\n"
+            "- 合规：避免绝对化/虚假功效/医疗承诺/引战。\n"
+            "- hashtags：数组，3-10个，元素形如 '#xxx'；full_content 最后一行把这些 hashtags 用空格拼起来。\n\n"
+            f"【元信息】\n行业: {industry.get('name', industry_id)} ({industry_id})\n主题: {topic}\n风格人设: {style_label}\n"
+            + (f"借势角度: {hot_line}\n" if hot_line else "")
+            + (f"选题角度: {idea_angle}\n" if idea_angle else "")
+            + (f"选题标题: {idea_title}\n" if idea_title else "")
+            + "\n"
+            "【草稿（请优化）】\n"
+            + (f"草稿标题: {draft_title}\n" if draft_title else "")
+            + (f"草稿标签: {draft_tags_str}\n" if draft_tags_str else "")
+            + "草稿正文:\n"
+            + draft_full
+        )
+
+        try:
+            out = enhance_copy(
+                provider=provider,
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                timeout_s=timeout_s,
+            )
+        except LLMError as e:
+            print(f"⚠️  AI 增强失败，已回退到离线模板：{e}", file=sys.stderr)
+            return copy_data
+        except Exception as e:
+            print(f"⚠️  AI 增强异常，已回退到离线模板：{e}", file=sys.stderr)
+            return copy_data
+
+        parsed = self._try_parse_ai_json(out)
+        if not parsed:
+            merged = dict(copy_data)
+            if out.strip():
+                merged["full_content"] = out.strip()
+                merged["body"] = out.strip()
+            merged["ai_provider"] = provider
+            merged["ai_model"] = model
+            return merged
+
+        new_title = str(parsed.get("title", "") or "").strip()
+        new_full = str(parsed.get("full_content", "") or "").strip()
+        new_tags_raw = parsed.get("hashtags", [])
+        new_tags: List[str] = []
+        if isinstance(new_tags_raw, list):
+            for t in new_tags_raw:
+                ts = str(t).strip()
+                if not ts:
+                    continue
+                if not ts.startswith("#"):
+                    ts = "#" + ts.lstrip("#")
+                new_tags.append(ts)
+        new_tags = [x for x in new_tags if x]
+        if len(new_tags) > 10:
+            new_tags = new_tags[:10]
+
+        merged = dict(copy_data)
+        if new_title:
+            merged["title"] = new_title
+        if new_tags:
+            merged["hashtags"] = new_tags
+        if new_full:
+            merged["full_content"] = new_full
+            merged["body"] = new_full
+        merged["ai_provider"] = provider
+        merged["ai_model"] = model
+        return merged
     
     def _load_config(self) -> Dict:
         """加载配置文件"""
@@ -295,6 +480,130 @@ class CopywritingGenerator:
 
         return top
 
+    def get_hot_suggestions(self, text: str, industry: Optional[str] = None, top_k: int = 5) -> Dict[str, Any]:
+        raw = (text or "").strip()
+        if not raw:
+            return {"ok": False, "error": "empty_topic", "results": []}
+
+        ind_id = self._resolve_industry_id_from_hint(industry or "")
+        if not ind_id:
+            ind_id = self._auto_detect_industry_id(raw)
+
+        try:
+            from hot_topics.matcher import match_hot_topics
+        except Exception:
+            return {"ok": False, "error": "hot_topics_unavailable", "industry_id": ind_id, "topic": raw, "results": []}
+
+        try:
+            results = match_hot_topics(raw, ind_id, top_k=top_k)
+        except Exception:
+            return {"ok": False, "error": "hot_topics_failed", "industry_id": ind_id, "topic": raw, "results": []}
+
+        ind = self.industries.get(ind_id, {}) or {}
+        return {
+            "ok": True,
+            "industry_id": ind_id,
+            "industry": {"id": ind_id, "name": ind.get("name", ""), "icon": ind.get("icon", ""), "description": ind.get("description", "")},
+            "topic": raw,
+            "results": results or [],
+        }
+
+    def diagnose_copy(self, title: str, body: str, industry: Optional[str] = None) -> Dict[str, Any]:
+        t = (title or "").strip()
+        b = body or ""
+        if not t:
+            return {"ok": False, "error": "empty_title"}
+
+        ind_id = self._resolve_industry_id_from_hint(industry or "")
+        if not ind_id:
+            ind_id = self._auto_detect_industry_id(t + " " + b)
+
+        try:
+            from diagnosis.engine import diagnose_copy
+        except Exception:
+            return {"ok": False, "error": "diagnosis_unavailable", "industry_id": ind_id}
+
+        try:
+            result = diagnose_copy(t, b, ind_id)
+        except Exception:
+            return {"ok": False, "error": "diagnosis_failed", "industry_id": ind_id}
+
+        return {"ok": True, "industry_id": ind_id, "title": t, "result": result}
+
+    def build_brief(self, text: str, industry: Optional[str] = None, style: Optional[str] = None) -> Dict[str, Any]:
+        raw = (text or "").strip()
+        if not raw:
+            return {"ok": False, "error": "empty_input"}
+
+        industry_id, topic, style_hint = self._parse_quick_text(raw)
+
+        # allow overrides via flags
+        ind_override = self._resolve_industry_id_from_hint(industry or "")
+        if ind_override:
+            industry_id = ind_override
+        elif not industry_id:
+            industry_id = self._auto_detect_industry_id(topic)
+
+        style_id = (
+            self._resolve_style_id_from_hint(style)
+            or self._resolve_style_id_from_hint(style_hint)
+            or self._default_style_id(industry_id)
+        )
+
+        ind = self.industries.get(industry_id, {}) or {}
+        keywords = [str(x).strip() for x in (ind.get("keywords", []) or []) if str(x).strip()]
+        hashtags = [str(x).strip() for x in (ind.get("hashtags", []) or []) if str(x).strip()]
+        emojis = [str(x).strip() for x in (ind.get("emojis", []) or []) if str(x).strip()]
+
+        # formulas recommended by industry
+        formula_ids = ind.get("formulas", []) or []
+        formula_items: List[Dict[str, Any]] = []
+        for fid in formula_ids:
+            f = self.formulas.get(str(fid), {}) or {}
+            if not f:
+                continue
+            formula_items.append({
+                "id": f.get("id", str(fid)),
+                "name": f.get("name", ""),
+                "template": f.get("template", ""),
+            })
+            if len(formula_items) >= 6:
+                break
+
+        style_notes = {
+            "bestie": ["口吻像闺蜜分享", "更偏种草/体验", "emoji适中，段首点缀"],
+            "pro": ["结论先行，讲维度/标准", "少空话，多可执行", "emoji偏少"],
+            "notes": ["像笔记，条理清晰", "多清单/步骤/公式", "适合收藏"],
+            "roast": ["吐槽但给解决方案", "突出避雷点", "语气犀利但不攻击"],
+            "warm": ["温柔、松弛感", "减压/陪伴式表达", "避免制造焦虑"],
+            "coach": ["打卡/训练计划感", "强调执行与复盘", "适合挑战/阶段目标"],
+        }
+
+        hot = self._suggest_hot_angle(topic, industry_id)
+        title_max = int((self.config.get("limits", {}) or {}).get("title_max_length", 20))
+
+        return {
+            "ok": True,
+            "topic": topic,
+            "industry": {
+                "id": industry_id,
+                "name": ind.get("name", ""),
+                "icon": ind.get("icon", ""),
+                "description": ind.get("description", ""),
+            },
+            "style": {"id": style_id, "label": self._style_label(style_id), "notes": style_notes.get(style_id, [])},
+            "hot": hot,
+            "keywords": keywords[:20],
+            "hashtags": hashtags[:12],
+            "emojis": emojis[:12],
+            "formulas": formula_items,
+            "constraints": {
+                "title_max_length": title_max,
+                "full_content_structure": ["开头1段", "正文3-6段", "CTA1段", "最后一行话题标签"],
+                "compliance": ["避免绝对化/医疗承诺/虚假功效", "避免引战与敏感词", "用体验与方法替代承诺"],
+            },
+        }
+
     def _render_title_template(self, template: str, idea: Dict, industry: Dict, topic: str) -> str:
         t = template or ""
         ind_name = str(industry.get("name", ""))
@@ -405,6 +714,14 @@ class CopywritingGenerator:
                 selected_title = {"text": topic}
 
             content = self.generate_content(selected_title.get("text", topic), selected_idea, industry_id, style_id=style_id)
+            content = self._maybe_ai_enhance_copy(
+                content,
+                topic=topic,
+                industry_id=industry_id,
+                style_id=style_id,
+                hot=hot,
+                idea=selected_idea,
+            )
             content["industry"] = industry_id
             content["formula_used"] = selected_title.get("formula")
             content["score"] = selected_title.get("score")
@@ -446,18 +763,14 @@ class CopywritingGenerator:
             print("❌ 主题为空")
             return []
 
-        ind_id = self._resolve_industry_id_from_hint(industry or "")
-        if not ind_id:
-            ind_id = self._auto_detect_industry_id(raw)
-
-        try:
-            from hot_topics.matcher import match_hot_topics
-            results = match_hot_topics(raw, ind_id, top_k=top_k)
-        except Exception:
+        payload = self.get_hot_suggestions(raw, industry=industry, top_k=top_k)
+        if not payload.get("ok"):
             print("❌ 热点模块不可用")
             return []
 
-        ind = self.industries.get(ind_id, {})
+        ind = payload.get("industry", {}) or {}
+        ind_id = payload.get("industry_id")
+        results = payload.get("results", []) or []
         print("\n" + "=" * 50)
         print("🔥 热点推荐")
         print(f"🏭 行业: {ind.get('icon', '')} {ind.get('name', ind_id)}")
@@ -492,18 +805,14 @@ class CopywritingGenerator:
         if b is None:
             b = input("请输入正文（可直接粘贴一段）：").strip()
 
-        ind_id = self._resolve_industry_id_from_hint(industry or "")
-        if not ind_id:
-            ind_id = self._auto_detect_industry_id(t + " " + (b or ""))
-
-        try:
-            from diagnosis.engine import diagnose_copy
-            result = diagnose_copy(t, b or "", ind_id)
-        except Exception:
+        payload = self.diagnose_copy(t, b or "", industry=industry)
+        if not payload.get("ok"):
             print("❌ 诊断模块不可用")
             return {}
 
-        ind = self.industries.get(ind_id, {})
+        ind_id = str(payload.get("industry_id") or "").strip()
+        result = payload.get("result", {}) or {}
+        ind = self.industries.get(ind_id, {}) if ind_id else {}
         print("\n" + "=" * 50)
         print("🔍 文案诊断")
         print(f"🏭 行业: {ind.get('icon', '')} {ind.get('name', ind_id)}")
@@ -957,7 +1266,15 @@ class CopywritingGenerator:
         print("✨ Step 3: 正文生成")
         print("-"*50)
         
-        content = self.generate_content(selected_title['text'], selected_idea, industry_id)
+        style_id = self._default_style_id(industry_id)
+        content = self.generate_content(selected_title['text'], selected_idea, industry_id, style_id=style_id)
+        content = self._maybe_ai_enhance_copy(
+            content,
+            topic=topic,
+            industry_id=industry_id,
+            style_id=style_id,
+            idea=selected_idea,
+        )
         
         print("\n🎉 生成的完整文案：\n")
         print("="*50)
@@ -1027,6 +1344,7 @@ def main():
 
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--advanced", action="store_true", help="Use interactive 3-step flow")
+    mode.add_argument("--brief", action="store_true", help="Output writing brief/context (tool mode)")
     mode.add_argument("--hot", action="store_true", help="Show hot topic suggestions")
     mode.add_argument("--diagnose", action="store_true", help="Diagnose an existing copy")
     mode.add_argument("--history", action="store_true", help="Show saved history")
@@ -1034,6 +1352,12 @@ def main():
     parser.add_argument("--variants", type=int, default=1, help="Generate N variants in quick mode (default 1)")
     parser.add_argument("--style", type=str, default=None, help="Style/persona (e.g. 专业测评/学霸笔记/吐槽避雷)")
     parser.add_argument("--save", action="store_true", help="Save outputs to history (quick mode)")
+
+    parser.add_argument("--ai", action="store_true", help="Enhance output using an LLM API (requires env API key)")
+    parser.add_argument("--provider", type=str, default="anthropic", choices=["anthropic", "openai"], help="LLM provider for --ai")
+    parser.add_argument("--model", type=str, default=None, help="Override LLM model for --ai")
+
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON to stdout (tooling)")
 
     parser.add_argument("--industry", type=str, default=None, help="Industry id or Chinese hint")
     parser.add_argument("--limit", type=int, default=5, help="Limit for --hot/--history")
@@ -1044,6 +1368,7 @@ def main():
     args = parser.parse_args()
 
     generator = CopywritingGenerator()
+    generator.configure_ai(enabled=bool(args.ai), provider=args.provider, model=args.model)
     if args.advanced:
         print("📝 小红书爆款文案生成器（高级模式）")
         print("版本 1.0.0")
@@ -1051,16 +1376,63 @@ def main():
         generator.run()
         return
 
+    if args.brief:
+        payload = generator.build_brief(args.text or "", industry=args.industry, style=args.style)
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            if not payload.get("ok"):
+                print("❌ 生成 brief 失败")
+                return
+            ind = payload.get("industry", {}) or {}
+            st = payload.get("style", {}) or {}
+            print("\n" + "=" * 50)
+            print("🧭 写作 Brief")
+            print(f"🏭 行业: {ind.get('icon', '')} {ind.get('name', ind.get('id', ''))}")
+            print(f"💭 主题: {payload.get('topic', '')}")
+            print(f"🎭 风格: {st.get('label', st.get('id', ''))}")
+            hot = payload.get("hot")
+            if isinstance(hot, dict) and hot.get("suggested_angle"):
+                print(f"🔥 借势角度: {hot.get('suggested_angle')}")
+            print("=" * 50)
+        return
+
     if args.hot:
-        generator.run_hot_mode(args.text, industry=args.industry, top_k=args.limit)
+        if args.json:
+            payload = generator.get_hot_suggestions(args.text or "", industry=args.industry, top_k=args.limit)
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            generator.run_hot_mode(args.text, industry=args.industry, top_k=args.limit)
         return
 
     if args.diagnose:
-        generator.run_diagnose_mode(title=args.title, body=args.body, industry=args.industry)
+        if args.json:
+            payload = generator.diagnose_copy(args.title or "", args.body or "", industry=args.industry)
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            generator.run_diagnose_mode(title=args.title, body=args.body, industry=args.industry)
         return
 
     if args.history:
-        generator.run_history_mode(limit=args.limit, industry=args.industry, show=args.show, delete=args.delete)
+        if args.json:
+            try:
+                from data.storage import LocalStorage
+                storage = LocalStorage(DATA_DIR)
+                if args.delete:
+                    ok = storage.delete_copy(args.delete)
+                    payload = {"ok": bool(ok), "action": "delete", "id": args.delete}
+                elif args.show:
+                    rec = storage.get_copy_by_id(args.show)
+                    payload = {"ok": bool(rec), "action": "show", "id": args.show, "record": rec}
+                else:
+                    ind_id = generator._resolve_industry_id_from_hint(args.industry or "")
+                    history = storage.get_history(limit=args.limit, industry=ind_id)
+                    payload = {"ok": True, "action": "list", "industry": ind_id, "limit": args.limit, "records": history}
+                print(json.dumps(payload, ensure_ascii=False, indent=2))
+            except Exception:
+                print(json.dumps({"ok": False, "error": "history_unavailable"}, ensure_ascii=False, indent=2))
+        else:
+            generator.run_history_mode(limit=args.limit, industry=args.industry, show=args.show, delete=args.delete)
         return
 
     generator.run_quick_mode(args.text, variants=args.variants, style=args.style, save=args.save)

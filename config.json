@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "name": "小红书爆款文案生成器",
+  "description": "Xiaohongshu Viral Copywriting Generator",
+  "settings": {
+    "default_industry": "beauty",
+    "language": "zh",
+    "emoji_style": "moderate",
+    "auto_save": false,
+    "max_history": 100
+  },
+  "paths": {
+    "industries": "industries/",
+    "formulas": "formulas/",
+    "hot_topics": "hot_topics/",
+    "diagnosis": "diagnosis/",
+    "data": "data/"
+  },
+  "limits": {
+    "title_max_length": 20,
+    "ideas_count": 5,
+    "titles_count": 5,
+    "hashtags_min": 5,
+    "hashtags_max": 10,
+    "emoji_min": 3
+  },
+  "api_config": {
+    "note": "实时API配置（可选，需用户自行申请API key）",
+    "enabled": false,
+    "apis": {
+      "weibo_hot": {
+        "name": "微博热搜",
+        "url": "https://api.weibo.com/2/trends.json",
+        "auth": "oauth2",
+        "enabled": false,
+        "api_key": "YOUR_API_KEY_HERE"
+      },
+      "zhihu_hot": {
+        "name": "知乎热榜",
+        "url": "https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total",
+        "auth": "none",
+        "enabled": false
+      },
+      "news_api": {
+        "name": "新闻API",
+        "url": "https://newsapi.org/v2/top-headlines",
+        "auth": "api_key",
+        "enabled": false,
+        "api_key": "YOUR_API_KEY_HERE"
+      }
+    },
+    "setup_guide": "使用说明：如需实时热点，请申请对应API key并填入上方配置"
+  }
+}
